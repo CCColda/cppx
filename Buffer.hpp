@@ -61,6 +61,10 @@ public:
 	static const BufferManager stackManager;
 	static const BufferManager heapManager;
 
+	static constexpr const BufferManager * onStatic = &staticManager;
+	static constexpr const BufferManager * onStack = &stackManager;
+	static constexpr const BufferManager * onHeap = &heapManager;
+
 private:
 	BufferCore *m_core;
 
@@ -72,10 +76,10 @@ public:
 	Buffer(Buffer &&other);
 	~Buffer();
 
-	static [[nodiscard]] Buffer Heap(std::size_t size);
-	static [[nodiscard]] Buffer HeapFrom(void *ptr, std::size_t size);
-	static [[nodiscard]] Buffer Stack(void *ptr, std::size_t size);
-	static [[nodiscard]] const Buffer Static(void *ptr, std::size_t size);
+	[[nodiscard]] static Buffer Heap(std::size_t size);
+	[[nodiscard]] static Buffer HeapFrom(void *ptr, std::size_t size);
+	[[nodiscard]] static Buffer Stack(void *ptr, std::size_t size);
+	[[nodiscard]] static const Buffer Static(void *ptr, std::size_t size);
 
 	Buffer &operator=(const Buffer &other);
 	Buffer &operator=(Buffer &&other);
@@ -164,6 +168,9 @@ public:
 		inline byte_t operator*() const { return value(); }
 		inline byte_t &operator*() { return value(); }
 
+		inline byte_t operator[](std::size_t offset) const { return step(offset).value(); }
+		inline byte_t &operator[](std::size_t offset) { return step(offset).value(); }
+
 		inline Iterator &operator++() { return stepSelf(1); }
 		inline Iterator &operator--() { return stepSelf(-1); }
 
@@ -207,8 +214,8 @@ public:
 	[[nodiscard]] Buffer clone(const BufferManager *manager = nullptr) const;
 	Buffer &selfClone(const Buffer &other, const BufferManager *manager = nullptr);
 
-	[[nodiscard]] Buffer range(std::size_t start, std::size_t end, bool constant = false) const;
-	[[nodiscard]] Buffer range(Iterator start, Iterator end, bool constant = false) const;
+	[[nodiscard]] Buffer range(std::size_t start, std::size_t end, const BufferManager *manager = nullptr) const;
+	[[nodiscard]] Buffer range(Iterator start, Iterator end, const BufferManager *manager = nullptr) const;
 
 	[[nodiscard]] Buffer reverse(const BufferManager *manager = nullptr) const;
 	[[nodiscard]] Buffer reverse(std::size_t start, std::size_t end, const BufferManager *manager = nullptr) const;
@@ -219,13 +226,19 @@ public:
 	Buffer &selfReverse(Iterator start, Iterator end);
 
 	// TODO custom manager
-	[[nodiscard]] Buffer insert(std::size_t index, const Buffer &value) const;
-	[[nodiscard]] Buffer insert(Iterator index, const Buffer &value) const;
-	[[nodiscard]] Buffer append(const Buffer &right) const;
+	[[nodiscard]] Buffer insert(std::size_t index, const Buffer &value, const BufferManager *manager = nullptr) const;
+	[[nodiscard]] Buffer insert(Iterator index, const Buffer &value, const BufferManager *manager = nullptr) const;
+	[[nodiscard]] Buffer append(const Buffer &right, const BufferManager *manager = nullptr) const;
 
 	Buffer &selfInsert(std::size_t index, const Buffer &value);
 	Buffer &selfInsert(Iterator index, const Buffer &value);
 	Buffer &selfAppend(const Buffer &right);
+
+	[[nodiscard]] Buffer erase(std::size_t start, std::size_t end, const BufferManager *manager = nullptr) const;
+	[[nodiscard]] Buffer erase(Iterator start, Iterator end, const BufferManager *manager = nullptr) const;
+
+	Buffer& selfErase(std::size_t start, std::size_t end);
+	Buffer& selfErase(Iterator start, Iterator end);
 
 	enum Representation : std::uint8_t {
 		HEX = 0x01,

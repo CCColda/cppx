@@ -59,6 +59,7 @@ constexpr const char *buf_readonly = "Buffer cannot be modified";
 constexpr const char *buf_data_not_owned = "Cannot use modified data";
 constexpr const char *buf_insufficient = "Insufficient buffer storage";
 constexpr const char *buf_no_manager = "No suitable data manager";
+constexpr const char *buf_cannot_copy = "Cannot copy to new buffer";
 
 constexpr const char *buf_fail_ref_overflow = "Reference count overflow";
 constexpr const char *buf_fail_ref_underflow = "Reference count underflow";
@@ -613,8 +614,8 @@ Buffer::Iterator Buffer::end() const
 		throw Exception(Exception::makeCallString(__FUNCTION__, manager), bufexc::buf_no_alloc);
 
 	Buffer result = Buffer(resultManager, m_core->m_size);
-	m_core->m_size = m_core->m_preall;
-	m_core->m_preall = 0;
+	result.m_core->m_size = result.m_core->m_preall;
+	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(result.m_core->m_address, m_core->m_address, m_core->m_size);
 
@@ -649,18 +650,23 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 	return *this;
 }
 
-[[nodiscard]] Buffer Buffer::range(std::size_t start, std::size_t end, bool constant) const
+[[nodiscard]] Buffer Buffer::range(std::size_t start, std::size_t end, const BufferManager *imanager) const
 {
-	if (end < start || end >= size())
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, constant), bufexc::invalid_range);
+	if (end < start || end > size())
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
-	// m_core is defined - if undefined, (end >= 0, size = 0 -> throw)
+	const BufferManager * newManager = imanager ? imanager : m_core->m_manager;
 
-	if (constant)
-		return Buffer::Static(m_core->m_address + start, end - start);
+	if (!newManager)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
 
-	// TODO
-	auto result = Buffer(&heapManager, end - start);
+	if (!m_core)
+		return Buffer(newManager);
+
+	if (!newManager->flags.modify || !newManager->flags.memory)
+		return Buffer(newManager, m_core->m_address + start, end - start);
+
+	auto result = Buffer(newManager, end - start);
 	result.m_core->m_size = result.m_core->m_preall;
 	result.m_core->m_preall = 0;
 
@@ -669,20 +675,23 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 	return result;
 }
 
-[[nodiscard]] Buffer Buffer::range(Iterator start, Iterator end, bool constant) const
+[[nodiscard]] Buffer Buffer::range(Iterator start, Iterator end, const BufferManager *imanager) const
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, constant), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
-	return range(start.m_index, end.m_index, constant);
+	return range(start.m_index, end.m_index, imanager);
 }
 
 [[nodiscard]] Buffer Buffer::reverse(std::size_t start, std::size_t end, const BufferManager *imanager) const
 {
 	if (end < start || end > size())
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
 	const BufferManager *newManager = imanager ? imanager : manager();
+
+	if (!newManager)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
 
 	auto result = Buffer(newManager, m_core->m_size);
 	result.m_core->m_size = result.m_core->m_preall;
@@ -707,7 +716,7 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 [[nodiscard]] Buffer Buffer::reverse(Iterator start, Iterator end, const BufferManager *imanager) const
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
 	return reverse(start.m_index, end.m_index, imanager);
 }
@@ -750,12 +759,15 @@ Buffer &Buffer::selfReverse()
 	return selfReverse(0, size());
 }
 
-[[nodiscard]] Buffer Buffer::insert(std::size_t index, const Buffer &value) const
+[[nodiscard]] Buffer Buffer::insert(std::size_t index, const Buffer &value, const BufferManager *imanager) const
 {
 	if (index > size())
 		throw Exception(Exception::makeCallString(__FUNCTION__, end, value), bufexc::iter_invalid);
 
-	const BufferManager *newManager = manager() ? manager() : &heapManager;
+	const BufferManager *newManager = imanager ? imanager : manager();
+
+	if (!newManager)
+		throw Exception(Exception::makeCallString(__FUNCTION__, index, value, imanager), bufexc::buf_no_manager);
 
 	Buffer newBuffer = Buffer(newManager, size() + value.size());
 	newBuffer.m_core->m_size = newBuffer.m_core->m_preall;
@@ -772,17 +784,17 @@ Buffer &Buffer::selfReverse()
 	return newBuffer;
 }
 
-[[nodiscard]] Buffer Buffer::insert(Iterator index, const Buffer &value) const
+[[nodiscard]] Buffer Buffer::insert(Iterator index, const Buffer &value, const BufferManager *imanager) const
 {
 	if (index.m_data != m_core)
-		throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::iter_invalid);
+		throw Exception(Exception::makeCallString(__FUNCTION__, index, value, imanager), bufexc::iter_invalid);
 
-	return insert(index.m_index, value);
+	return insert(index.m_index, value, imanager);
 }
 
-[[nodiscard]] Buffer Buffer::append(const Buffer &right) const
+[[nodiscard]] Buffer Buffer::append(const Buffer &right, const BufferManager *imanager) const
 {
-	return insert(size(), right);
+	return insert(size(), right, imanager);
 }
 
 Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
@@ -815,11 +827,9 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 
 		BUFFER_COPY(newCore->m_address, m_core->m_address, index);
 		BUFFER_COPY(newCore->m_address + index, value.m_core->m_address, value.m_core->m_size);
-		BUFFER_COPY(newCore->m_address + index + value.m_core->m_size, m_core->m_address + value.m_core->m_size, m_core->m_size - index);
+		BUFFER_COPY(newCore->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
 
 		BufferCore::change(m_core, newCore);
-
-		return *this;
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + index + value.m_core->m_size, m_core->m_address + index, value.m_core->m_size);
@@ -841,6 +851,90 @@ Buffer &Buffer::selfAppend(const Buffer &right)
 {
 	return selfInsert(size(), right);
 }
+
+[[nodiscard]] Buffer Buffer::erase(std::size_t start, std::size_t end, const BufferManager *imanager) const
+{
+	if (end < start || end > size())
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
+
+	const BufferManager * newManager = imanager ? imanager : m_core->m_manager;
+
+	if (!newManager)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
+
+	if (!m_core)
+		return Buffer(newManager);
+
+	if (!newManager->flags.modify)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_cannot_copy);
+
+	auto result = Buffer(newManager, size() - end + start);
+	result.m_core->m_size = result.m_core->m_preall;
+	result.m_core->m_preall = 0;
+
+	BUFFER_COPY(result.m_core->m_address, m_core->m_address, start);
+	BUFFER_COPY(result.m_core->m_address, m_core->m_address + end, size() - end);
+
+	return result;
+}
+
+[[nodiscard]] Buffer Buffer::erase(Iterator start, Iterator end, const BufferManager *imanager) const
+{
+	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
+
+	return erase(start.m_index, end.m_index, imanager);
+}
+
+
+Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
+{
+	if (end < start || end > size())
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+
+	if (!m_core)
+		return *this;
+
+	if (!m_core->m_manager->flags.modify)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_readonly);
+
+	const auto newSize = size() - end + start;
+
+	if (m_core->m_refcount > 1) {
+		if (!m_core->m_manager->flags.memory)
+			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_no_alloc);
+
+		BufferCore *newCore = new BufferCore(m_core->m_manager);
+
+		if (!newCore->tryAllocate(newSize))
+			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_fail_alloc);
+
+		newCore->m_size = newCore->m_preall;
+		newCore->m_preall = 0;
+
+		BUFFER_COPY(newCore->m_address, m_core->m_address, start);
+		BUFFER_COPY(newCore->m_address, m_core->m_address + end, size() - end);
+
+		BufferCore::change(m_core, newCore);
+
+	}
+	else {
+		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
+		m_core->m_preall += size() - end;
+		m_core->m_size = newSize;
+	}
+
+	return *this;
+}
+
+Buffer& Buffer::selfErase(Iterator start, Iterator end)
+{
+	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
+		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+
+	return selfErase(start.m_index, end.m_index);
+}
+
 
 std::string Buffer::represent(std::uint8_t form) const
 {

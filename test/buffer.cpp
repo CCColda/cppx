@@ -240,11 +240,19 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 
 	SECTION("ranges")
 	{
-		auto range1 = s_staticbuf.range(3, 5);
-		auto range2 = s_staticbuf.range(s_staticbuf.begin() + 3, s_staticbuf.begin() + 5, true);
+		const auto range1 = s_staticbuf.range(3, 5);
+		const auto range2 = s_staticbuf.range(s_staticbuf.begin() + 3, s_staticbuf.begin() + 5);
+		auto range3 = s_staticbuf.range(s_staticbuf.begin() + 3, s_staticbuf.begin() + 5, Buffer::onHeap);
 
 		REQUIRE(range1 == range2);
 		REQUIRE(range1[0] == s_staticbuf[3]);
+
+		REQUIRE(range1.manager() == &Buffer::staticManager);
+		REQUIRE(range2.manager() == &Buffer::staticManager);
+
+		REQUIRE_NOTHROW(range3[1] = 0x99);
+		REQUIRE(range3[1] == 0x99);
+		REQUIRE(s_staticbuf[1] != 0x99);
 	}
 
 	SECTION("representation")
@@ -263,12 +271,20 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 
 	SECTION("reverse")
 	{
-		REQUIRE(s_staticbuf.reverse().size() == s_staticbuf.size());
+		SECTION("throws without manager")
+		{
+			REQUIRE_THROWS(s_staticbuf.reverse());
+		}
 
-		REQUIRE(s_staticbuf.reverse()[0] == s_staticbuf[s_staticbuf.size() - 1]);
-		REQUIRE(s_staticbuf.reverse().reverse() == s_staticbuf);
+		SECTION("length and data match")
+		{
+			REQUIRE(s_staticbuf.reverse(&Buffer::heapManager).size() == s_staticbuf.size());
 
-		REQUIRE(Buffer::Static((void *)"\x01\x23\x45\x67\x89\xAB", 6).reverse(1, 4) == Buffer::Static((void *)"\x01\x67\x45\x23\x89\xAB", 6));
+			REQUIRE(s_staticbuf.reverse(&Buffer::heapManager)[0] == s_staticbuf[s_staticbuf.size() - 1]);
+			REQUIRE(s_staticbuf.reverse(&Buffer::heapManager).reverse() == s_staticbuf);
+
+			REQUIRE(Buffer::Static((void *)"\x01\x23\x45\x67\x89\xAB", 6).reverse(1, 4, &Buffer::heapManager) == Buffer::Static((void *)"\x01\x67\x45\x23\x89\xAB", 6));
+		}
 	}
 
 	SECTION("selfReverse")
@@ -286,7 +302,10 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 		std::uint8_t stackdata2[4] = {0x01, 0x02, 0x03, 0x04};
 		std::uint8_t stackdata3[4] = {0xA0, 0xB0, 0xC0, 0xD0};
 
-		auto insertBuffer = Buffer().insert(0, Buffer::Stack(stackdata, sizeof(stackdata)));
+		REQUIRE_THROWS(Buffer().insert(0, Buffer::Stack(stackdata, sizeof(stackdata))));
+		REQUIRE_NOTHROW(Buffer().insert(0, Buffer::Stack(stackdata, sizeof(stackdata)), Buffer::onHeap));
+
+		auto insertBuffer = Buffer(Buffer::onHeap).insert(0, Buffer::Stack(stackdata, sizeof(stackdata)));
 
 		REQUIRE(insertBuffer.size() == sizeof(stackdata));
 		REQUIRE(insertBuffer.preallocated() == 0);
@@ -311,7 +330,10 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 		std::uint8_t stackdata2[4] = {0x01, 0x02, 0x03, 0x04};
 		std::uint8_t stackdata3[4] = {0xA0, 0xB0, 0xC0, 0xD0};
 
-		auto insertBuffer = Buffer();
+		auto insertBuffer = Buffer(&Buffer::heapManager);
+		auto invalidInsertBuffer = Buffer();
+
+		REQUIRE_THROWS(invalidInsertBuffer.selfInsert(0, Buffer::Stack(stackdata, sizeof(stackdata))));
 
 		insertBuffer.selfInsert(0, Buffer::Stack(stackdata, sizeof(stackdata)));
 
@@ -330,6 +352,18 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 		REQUIRE(insertBuffer.size() == sizeof(stackdata) + sizeof(stackdata2) + sizeof(stackdata3));
 		REQUIRE(insertBuffer.preallocated() == 0);
 		REQUIRE(insertBuffer == Buffer::Static((void *)"\xF0\xE1\xD2\x01\x02\x03\x04\xC3\xB4\xA5\x96\x87\xA0\xB0\xC0\xD0", 16));
+	}
+
+	SECTION("erase")
+	{
+		REQUIRE_THROWS(s_staticbuf.erase(4, s_staticbuf.size()));
+		REQUIRE(s_staticbuf.erase(4, s_staticbuf.size(), Buffer::onHeap) == Buffer::Static((void*)"i am", 4));
+	}
+
+	SECTION("selfErase")
+	{
+		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(4, s_staticbuf.size()) == Buffer::Static((void*)"i am", 4));
+		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(0, s_staticbuf.size()) == Buffer());
 	}
 }
 

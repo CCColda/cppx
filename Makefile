@@ -1,5 +1,6 @@
 CC      := g++
-RM		:= del
+RM		:= rm
+MD      := mkdir
 CCFLAGS := -std=c++17 -g3 -Wno-attributes -DBUFFER_DEBUG
 LDFLAGS := -g3
 LIB     := lib
@@ -53,7 +54,7 @@ default: all
 
 .PHONY: all clean work
 
-all: $(BIN)
+all: $(OBJ_FOLDER) $(BIN_FOLDER) $(BIN)
 
 ifeq ($(RM),del)
 
@@ -79,6 +80,12 @@ ${call srcs_2_objs,$(SRC_MAIN)}: $(SRC_MAIN)
 	${call build,$^,$@}
 
 #----------------------------------------
+
+$(OBJ_FOLDER):
+	$(MD) $(OBJ_FOLDER)
+
+$(BIN_FOLDER):
+	$(MD) $(BIN_FOLDER)
 
 $(BIN): $(OBJ)
 	$(CC) -o $@ ${foreach v,$(LIB),-L$(v)} $^ $(CCFLAGS) $(LDFLAGS)
