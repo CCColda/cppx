@@ -164,6 +164,12 @@ void BufferCore::detach(BufferCore *&core)
 }
 
 /** @static */
+void BufferCore::create(BufferCore *&core, const BufferManager *manager, std::uint16_t preall, std::uint32_t size, std::uint8_t *address)
+{
+	core = new BufferCore(manager, preall, size, address);
+}
+
+/** @static */
 void BufferCore::release(BufferCore *&core)
 {
 	if (core->m_address && core->m_refcount <= 1 && core->m_manager->flags.memory) {
@@ -232,7 +238,7 @@ Buffer::Buffer(const BufferManager *manager, std::size_t size)
 		    Exception::makeCallString(__FUNCTION__, manager, size),
 		    bufexc::buf_no_alloc);
 
-	m_core = new BufferCore(manager);
+	BufferCore::create(m_core, manager);
 
 	// TODO?
 	if (size)
@@ -249,7 +255,7 @@ Buffer::Buffer(const BufferManager *manager, void *pointer, std::size_t size)
 		    Exception::makeCallString(__FUNCTION__, manager, pointer, size),
 		    bufexc::buf_data_not_owned);
 
-	m_core = new BufferCore(manager, 0, size, reinterpret_cast<std::uint8_t *>(pointer));
+	BufferCore::create(m_core, manager, 0, size, reinterpret_cast<std::uint8_t *>(pointer));
 }
 
 Buffer::Buffer(const Buffer &other)
@@ -272,7 +278,12 @@ Buffer::~Buffer()
 
 /** @static */ [[nodiscard]] Buffer Buffer::Heap(std::size_t size)
 {
-	return Buffer(&heapManager, size);
+	auto result = Buffer(&heapManager, size);
+
+	result.m_core->m_size = result.m_core->m_preall;
+	result.m_core->m_preall = 0;
+
+	return result;
 }
 
 /** @static */ [[nodiscard]] Buffer Buffer::HeapFrom(void *ptr, std::size_t size)
@@ -638,7 +649,7 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 	if (m_core)
 		BufferCore::release(m_core);
 
-	m_core = new BufferCore(resultManager);
+	BufferCore::create(m_core, resultManager);
 	if (!m_core->tryAllocate(other.m_core->m_size))
 		throw Exception(Exception::makeCallString(__FUNCTION__, other, imanager), bufexc::buf_fail_alloc);
 
@@ -734,13 +745,34 @@ Buffer &Buffer::selfReverse(std::size_t start, std::size_t end)
 	if (!m_core->m_manager->flags.modify)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_readonly);
 
-	const std::size_t halfway = start + (end - start) / 2;
+	if (m_core->m_refcount > 1) {
+		if (!m_core->m_manager->flags.memory)
+			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_insufficient);
 
-	for (std::size_t i = start, j = end - 1; i < halfway; ++i, --j) {
-		const std::uint8_t left = m_core->m_address[i];
+		BufferCore *newCore = nullptr;
+		BufferCore::create(newCore, m_core->m_manager);
 
-		m_core->m_address[i] = m_core->m_address[j];
-		m_core->m_address[j] = left;
+		if (!newCore->tryAllocate(m_core->m_size))
+			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_fail_alloc);
+
+		newCore->m_size = newCore->m_preall;
+		newCore->m_preall = 0;
+
+		for (std::size_t i = 0, j = m_core->m_size - 1; i < m_core->m_size; ++i, --j) {
+			newCore->m_address[i] = m_core->m_address[j];
+		}
+
+		BufferCore::change(m_core, newCore);
+	}
+	else {
+		const std::size_t halfway = start + (end - start) / 2;
+
+		for (std::size_t i = start, j = end - 1; i < halfway; ++i, --j) {
+			const std::uint8_t left = m_core->m_address[i];
+
+			m_core->m_address[i] = m_core->m_address[j];
+			m_core->m_address[j] = left;
+		}
 	}
 
 	return *this;
@@ -817,7 +849,8 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 		if (!m_core->m_manager->flags.memory)
 			throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_insufficient);
 
-		BufferCore *newCore = new BufferCore(m_core->m_manager);
+		BufferCore *newCore = nullptr;
+		BufferCore::create(newCore, m_core->m_manager);
 
 		if (!newCore->tryAllocate(newSize))
 			throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_fail_alloc);
@@ -904,7 +937,8 @@ Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
 		if (!m_core->m_manager->flags.memory)
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_no_alloc);
 
-		BufferCore *newCore = new BufferCore(m_core->m_manager);
+		BufferCore *newCore = nullptr;
+		BufferCore::create(newCore, m_core->m_manager);
 
 		if (!newCore->tryAllocate(newSize))
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_fail_alloc);
@@ -920,8 +954,8 @@ Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
-		m_core->m_preall += size() - end;
-		m_core->m_size = newSize;
+		m_core->m_preall += end - start;
+		m_core->m_size -= end - start;
 	}
 
 	return *this;
@@ -977,11 +1011,6 @@ std::string Buffer::represent(std::uint8_t form) const
 	}
 
 	return stream.str();
-}
-
-std::string Buffer::toString() const
-{
-	return represent(Representation::HEX | Representation::PREFIXED);
 }
 
 // BufferOperations

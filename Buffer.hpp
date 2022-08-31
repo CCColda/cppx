@@ -36,8 +36,10 @@ public:
 
 	const BufferManager *m_manager;
 
-public:
+private:
 	BufferCore(const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
+
+public:
 	~BufferCore() = default;
 
 	bool tryShare();
@@ -47,6 +49,7 @@ public:
 	static void shareOrDetach(BufferCore *&core);
 
 	static void detach(BufferCore *&core);
+	static void create(BufferCore *&core, const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
 	static void release(BufferCore *&core);
 	static void change(BufferCore *&core, BufferCore *const newcore);
 	static void swap(BufferCore *&core, BufferCore *&newcore);
@@ -225,7 +228,6 @@ public:
 	Buffer &selfReverse(std::size_t start, std::size_t end);
 	Buffer &selfReverse(Iterator start, Iterator end);
 
-	// TODO custom manager
 	[[nodiscard]] Buffer insert(std::size_t index, const Buffer &value, const BufferManager *manager = nullptr) const;
 	[[nodiscard]] Buffer insert(Iterator index, const Buffer &value, const BufferManager *manager = nullptr) const;
 	[[nodiscard]] Buffer append(const Buffer &right, const BufferManager *manager = nullptr) const;
@@ -247,7 +249,7 @@ public:
 		PREFIXED = 0x08
 	};
 	std::string represent(std::uint8_t form = Representation::HEX) const;
-	std::string toString() const;
+	inline std::string toString() const { return represent(Representation::HEX | Representation::PREFIXED); }
 };
 } // namespace Cold
 
