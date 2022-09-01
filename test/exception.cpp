@@ -1,14 +1,14 @@
-#include "catch.hpp"
+#include <catch2/catch_all.hpp>
 #include <string>
 
-#include "../Exception.hpp"
+#include "Exception.hpp"
 
-CATCH_TRANSLATE_EXCEPTION(Cold::Exception const &exc)
+CATCH_TRANSLATE_EXCEPTION(colda::Exception const &exc)
 {
 	return exc.getString();
 }
 
-TEST_CASE("Cold::Exception", "[Exception]")
+TEST_CASE("colda::Exception", "[Exception]")
 {
 	constexpr const char *functions[] = {
 	    "function1",
@@ -20,7 +20,7 @@ TEST_CASE("Cold::Exception", "[Exception]")
 
 	constexpr const char *description = "Exception test";
 
-	Cold::Exception exc(functions[0], description);
+	colda::Exception exc(functions[0], description);
 
 	REQUIRE(exc.getDescription() == description);
 	REQUIRE(exc.getCallstack().size() == 1);
@@ -29,7 +29,7 @@ TEST_CASE("Cold::Exception", "[Exception]")
 	SECTION("increasing the stored call stack")
 	{
 		for (int i = 1; i < functions_size; ++i) {
-			exc = Cold::Exception(functions[i], exc);
+			exc = colda::Exception(functions[i], exc);
 		}
 
 		REQUIRE(exc.getCallstack().size() == functions_size);
@@ -41,7 +41,7 @@ TEST_CASE("Cold::Exception", "[Exception]")
 	{
 		using namespace std::string_literals;
 
-		const auto callstring = Cold::Exception::makeCallString(
+		const auto callstring = colda::Exception::makeCallString(
 		    "function_with_arguments", 9, "a const char*", 'c', 0.8f, 0.888);
 
 		const auto expected =

@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <typeinfo>
 
-namespace Cold {
+namespace colda {
 
 /** @brief Class representing callstack-tracking exceptions */
 class Exception {
@@ -96,6 +96,6 @@ public:
 	}
 };
 
-} // namespace Cold
+} // namespace colda
 
 #endif // !EXCEPTION_H

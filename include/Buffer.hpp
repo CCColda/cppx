@@ -6,7 +6,7 @@
 #include <functional>
 #include <string>
 
-namespace Cold {
+namespace colda {
 struct BufferFlags {
 	std::uint8_t memory : 1;
 	std::uint8_t modify : 1;
@@ -80,6 +80,7 @@ public:
 	~Buffer();
 
 	[[nodiscard]] static Buffer Heap(std::size_t size);
+	[[nodiscard]] static Buffer HeapPreall(std::size_t size);
 	[[nodiscard]] static Buffer HeapFrom(void *ptr, std::size_t size);
 	[[nodiscard]] static Buffer Stack(void *ptr, std::size_t size);
 	[[nodiscard]] static const Buffer Static(void *ptr, std::size_t size);
@@ -214,6 +215,8 @@ public:
 	Iterator begin() const;
 	Iterator end() const;
 
+	Buffer &selfPreallocate(std::size_t extra, const BufferManager *manager = nullptr);
+
 	[[nodiscard]] Buffer clone(const BufferManager *manager = nullptr) const;
 	Buffer &selfClone(const Buffer &other, const BufferManager *manager = nullptr);
 
@@ -251,6 +254,6 @@ public:
 	std::string represent(std::uint8_t form = Representation::HEX) const;
 	inline std::string toString() const { return represent(Representation::HEX | Representation::PREFIXED); }
 };
-} // namespace Cold
+} // namespace colda
 
 #endif // !defined(BUFFER_H)

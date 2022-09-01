@@ -2,7 +2,7 @@
 
 #include <iomanip>
 
-namespace Cold {
+namespace colda {
 
 Exception::Exception() noexcept
     : m_callstack(), m_description() {}
@@ -64,4 +64,4 @@ std::string Exception::getString() const noexcept
 	return "Description: \""s + m_description + "\"\nCallstack: "s + getCallstackString(11, -11);
 }
 
-} // namespace Cold
+} // namespace colda

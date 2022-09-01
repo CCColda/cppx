@@ -75,7 +75,7 @@ constexpr const char *no_data = "Data not avaliable";
 } // namespace bufexc
 } // namespace
 
-namespace Cold {
+namespace colda {
 #pragma region BufferManager
 
 /** @static */
@@ -284,6 +284,11 @@ Buffer::~Buffer()
 	result.m_core->m_preall = 0;
 
 	return result;
+}
+
+/** @static */ [[nodiscard]] Buffer Buffer::HeapPreall(std::size_t size)
+{
+	return Buffer(&heapManager, size);
 }
 
 /** @static */ [[nodiscard]] Buffer Buffer::HeapFrom(void *ptr, std::size_t size)
@@ -584,7 +589,7 @@ bool Buffer::Iterator::operator!=(const Iterator &other) const
 	return (m_data != other.m_data || m_index != other.m_index);
 }
 
-[[noexcept]] std::string Buffer::Iterator::toString() const
+std::string Buffer::Iterator::toString() const
 {
 	std::stringstream stream;
 
@@ -609,6 +614,33 @@ Buffer::Iterator Buffer::begin() const
 Buffer::Iterator Buffer::end() const
 {
 	return Iterator(m_core, m_core ? m_core->m_size : 0);
+}
+
+Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager)
+{
+	const BufferManager *resultManager = imanager ? imanager : manager();
+
+	if (!resultManager)
+		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_no_manager);
+
+	if (!(resultManager->flags.memory && resultManager->flags.modify))
+		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_no_alloc);
+
+	BufferCore* newCore = nullptr;
+	BufferCore::create(newCore, resultManager);
+
+	if (!newCore->tryAllocate(totalsize() + extra))
+		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_alloc);
+
+	newCore->m_size = size();
+	newCore->m_preall = preallocated() + extra;
+
+	if (m_core)
+		BUFFER_COPY(newCore->m_address, m_core->m_address, m_core->m_size);
+
+	BufferCore::change(m_core, newCore);
+
+	return *this;
 }
 
 [[nodiscard]] Buffer Buffer::clone(const BufferManager *manager) const
@@ -1016,4 +1048,4 @@ std::string Buffer::represent(std::uint8_t form) const
 // BufferOperations
 #pragma endregion
 
-} // namespace Cold
+} // namespace colda

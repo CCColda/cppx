@@ -1,26 +1,26 @@
 #ifndef TEST_BUFFER_H
 #define TEST_BUFFER_H
 
-#include "../Buffer.hpp"
+#include "Buffer.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_all.hpp>
 
 #include <execution>
 #include <numeric>
 
 namespace Catch {
 template <>
-struct StringMaker<Cold::Buffer> {
-	static std::string convert(Cold::Buffer const &value)
+struct StringMaker<colda::Buffer> {
+	static std::string convert(colda::Buffer const &value)
 	{
 		return value.toString();
 	}
 };
 } // namespace Catch
 
-TEST_CASE("Cold::Buffer", "[Buffer]")
+TEST_CASE("colda::Buffer", "[Buffer]")
 {
-	using Cold::Buffer;
+	using colda::Buffer;
 
 	static const char *s_staticData = "i am static data";
 
@@ -62,12 +62,21 @@ TEST_CASE("Cold::Buffer", "[Buffer]")
 			REQUIRE(staticBuffer.size() == 4);
 		}
 
+		SECTION("HeapPreall constructor")
+		{
+			const auto heapBuffer = Buffer::HeapPreall(4);
+
+			REQUIRE(heapBuffer.size() == 0);
+			REQUIRE(heapBuffer.preallocated() == 4);
+			REQUIRE(heapBuffer.data() != nullptr);
+		}
+
 		SECTION("Heap constructor")
 		{
 			const auto heapBuffer = Buffer::Heap(4);
 
-			REQUIRE(heapBuffer.size() == 0);
-			REQUIRE(heapBuffer.preallocated() == 4);
+			REQUIRE(heapBuffer.size() == 4);
+			REQUIRE(heapBuffer.preallocated() == 0);
 			REQUIRE(heapBuffer.data() != nullptr);
 		}
 
