@@ -18,11 +18,45 @@ struct StringMaker<colda::Buffer> {
 };
 } // namespace Catch
 
+template <std::size_t N = 16>
+const auto randomStackData()
+{
+	static_assert(N > 0, "N must be greater than 0");
+
+	struct {
+		std::uint8_t data[N];
+		std::size_t size;
+	} result = {{}, N};
+
+	for (std::size_t i = 0; i < result.size; ++i)
+		result.data[i] = rand() % 0x100;
+
+	return result;
+}
+
+template <std::size_t N = 16>
+const auto randomStaticData()
+{
+	static_assert(N > 0, "N must be greater than 0");
+
+	static std::uint8_t data[N] = {};
+
+	struct {
+		std::uint8_t *data;
+		std::size_t size;
+	} result = {(uint8_t *)&data, N};
+
+	for (std::size_t i = 0; i < result.size; ++i)
+		data[i] = rand() % 0x100;
+
+	return result;
+}
+
 TEST_CASE("colda::Buffer", "[Buffer]")
 {
 	using colda::Buffer;
 
-	static const char *s_staticData = "i am static data";
+	static const char s_staticData[] = "i am static data";
 
 	SECTION("constructor")
 	{
@@ -36,8 +70,11 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 
 		SECTION("size constructor")
 		{
-			REQUIRE_THROWS(Buffer(&Buffer::stackManager, 4));
-			REQUIRE_THROWS(Buffer(&Buffer::staticManager, 4));
+			SECTION("throws on size initialization")
+			{
+				REQUIRE_THROWS(Buffer(&Buffer::stackManager, 4));
+				REQUIRE_THROWS(Buffer(&Buffer::staticManager, 4));
+			}
 
 			const auto heapBuffer = Buffer(&Buffer::heapManager, 4);
 			REQUIRE(heapBuffer.size() == 0);
@@ -47,19 +84,23 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 
 		SECTION("data constructor")
 		{
-			REQUIRE_THROWS(Buffer(&Buffer::heapManager, (void *)"ABCD", 4));
+			const auto stackData = randomStackData();
+			const auto staticData = randomStaticData();
 
-			const char *stackData = "ABCD";
-			const auto stackBuffer = Buffer(&Buffer::stackManager, (void *)stackData, 4);
-			REQUIRE(stackBuffer.data() == stackData);
+			SECTION("throws on static initialization of heap")
+			{
+				REQUIRE_THROWS(Buffer(&Buffer::heapManager, (void *)"ABCD", 4));
+			}
+
+			const auto stackBuffer = Buffer(&Buffer::stackManager, (void *)stackData.data, stackData.size);
+			REQUIRE(stackBuffer.data() == stackData.data);
 			REQUIRE(stackBuffer.preallocated() == 0);
-			REQUIRE(stackBuffer.size() == 4);
+			REQUIRE(stackBuffer.size() == stackData.size);
 
-			static const char *staticData = "CDEF";
-			const auto staticBuffer = Buffer(&Buffer::staticManager, (void *)staticData, 4);
-			REQUIRE(staticBuffer.data() == staticData);
+			const auto staticBuffer = Buffer(&Buffer::staticManager, (void *)staticData.data, staticData.size);
+			REQUIRE(staticBuffer.data() == staticData.data);
 			REQUIRE(staticBuffer.preallocated() == 0);
-			REQUIRE(staticBuffer.size() == 4);
+			REQUIRE(staticBuffer.size() == staticData.size);
 		}
 
 		SECTION("HeapPreall constructor")
@@ -82,40 +123,45 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 
 		SECTION("HeapFrom constructor")
 		{
-			constexpr const char *heapData = "ABCD";
-			const auto heapBuffer = Buffer::HeapFrom((void *)heapData, 4);
+			const auto data = randomStackData();
+			const auto heapBuffer = Buffer::HeapFrom((void *)data.data, data.size);
 
-			REQUIRE(heapBuffer.size() == 4);
+			REQUIRE(heapBuffer.size() == data.size);
 			REQUIRE(heapBuffer.preallocated() == 0);
-			REQUIRE(((char *)heapBuffer.data())[0] == heapData[0]);
-			REQUIRE(((char *)heapBuffer.data())[1] == heapData[1]);
-			REQUIRE(((char *)heapBuffer.data())[2] == heapData[2]);
-			REQUIRE(((char *)heapBuffer.data())[3] == heapData[3]);
+
+			REQUIRE_THAT(heapBuffer.data(), Catch::Matchers::Predicate<void *>([data](void *bufdata) {
+				             for (std::size_t i = 0; i < data.size; ++i)
+					             if (data.data[i] != ((std::uint8_t *)bufdata)[i])
+						             return false;
+				             return true;
+			             }));
 		}
 
 		SECTION("Stack constructor")
 		{
-			const char *stackData = "GHIJ";
-			const auto stackBuffer = Buffer::Stack((void *)stackData, 4);
+			const auto stackData = randomStackData();
+			const auto stackBuffer = Buffer::Stack((void *)stackData.data, stackData.size);
 
-			REQUIRE(stackBuffer.size() == 4);
+			REQUIRE(stackBuffer.size() == stackData.size);
 			REQUIRE(stackBuffer.preallocated() == 0);
-			REQUIRE(stackBuffer.data() == stackData);
+			REQUIRE(stackBuffer.data() == stackData.data);
 		}
 
 		SECTION("Static constructor")
 		{
-			static const char *staticData = "KLMN";
-			const auto staticBuffer = Buffer::Stack((void *)staticData, 4);
+			const auto staticData = randomStaticData();
+			const auto staticBuffer = Buffer::Stack((void *)staticData.data, staticData.size);
 
-			REQUIRE(staticBuffer.size() == 4);
+			REQUIRE(staticBuffer.size() == staticData.size);
 			REQUIRE(staticBuffer.preallocated() == 0);
-			REQUIRE(staticBuffer.data() == staticData);
+			REQUIRE(staticBuffer.data() == staticData.data);
 		}
 	}
 
 	const auto s_staticbuf = Buffer::Static((void *)s_staticData, sizeof(s_staticData));
 	auto s_heapbuf = Buffer::Heap(sizeof(int));
+
+	// TODO
 
 	SECTION("comparisons")
 	{
@@ -215,6 +261,10 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 		REQUIRE(iteratorReduceCounter == s_staticbuf.size());
 		REQUIRE(traditionalReduce == iteratorReduce);
 		REQUIRE(iteratorReduce == stdReduce);
+	}
+
+	SECTION("preall")
+	{
 	}
 
 	SECTION("clone")
@@ -366,12 +416,12 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 	SECTION("erase")
 	{
 		REQUIRE_THROWS(s_staticbuf.erase(4, s_staticbuf.size()));
-		REQUIRE(s_staticbuf.erase(4, s_staticbuf.size(), Buffer::onHeap) == Buffer::Static((void*)"i am", 4));
+		REQUIRE(s_staticbuf.erase(4, s_staticbuf.size(), Buffer::onHeap) == Buffer::Static((void *)"i am", 4));
 	}
 
 	SECTION("selfErase")
 	{
-		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(4, s_staticbuf.size()) == Buffer::Static((void*)"i am", 4));
+		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(4, s_staticbuf.size()) == Buffer::Static((void *)"i am", 4));
 		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(0, s_staticbuf.size()) == Buffer());
 	}
 }

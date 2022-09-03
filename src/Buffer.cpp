@@ -240,7 +240,6 @@ Buffer::Buffer(const BufferManager *manager, std::size_t size)
 
 	BufferCore::create(m_core, manager);
 
-	// TODO?
 	if (size)
 		if (!m_core->tryAllocate(size))
 			throw Exception(
