@@ -7,7 +7,25 @@
 #define BUFFER_COPY(dest, src, size) memcpy(dest, src, size)
 #define BUFFER_MOVE(dest, src, size) memmove(dest, src, size)
 
-#if defined(BUFFER_NO_BUILTINS)
+#if defined(CPPX_BUFFER_BUILTINS)
+#define BUFFER_SAFE_INCREASE(x, onoverflow)                  \
+	{                                                        \
+		const auto __orig_x__ = x;                           \
+		if (__builtin_add_overflow(x, 1, &x)) [[unlikely]] { \
+			x = __orig_x__;                                  \
+			onoverflow;                                      \
+		}                                                    \
+	}
+
+#define BUFFER_SAFE_DECREASE(x, onoverflow)                  \
+	{                                                        \
+		const auto __orig_x__ = x;                           \
+		if (__builtin_sub_overflow(x, 1, &x)) [[unlikely]] { \
+			x = __orig_x__;                                  \
+			onoverflow;                                      \
+		}                                                    \
+	}
+#else // defined(CPPX_BUFFER_BUILTINS)
 #define BUFFER_SAFE_INCREASE(x, onoverflow) \
 	{                                       \
 		const auto __orig_x__ = x;          \
@@ -27,25 +45,7 @@
 			onoverflow;                     \
 		}                                   \
 	}
-#else // defined(BUFFER_NO_BUILTINS)
-#define BUFFER_SAFE_INCREASE(x, onoverflow)                  \
-	{                                                        \
-		const auto __orig_x__ = x;                           \
-		if (__builtin_add_overflow(x, 1, &x)) [[unlikely]] { \
-			x = __orig_x__;                                  \
-			onoverflow;                                      \
-		}                                                    \
-	}
-
-#define BUFFER_SAFE_DECREASE(x, onoverflow)                  \
-	{                                                        \
-		const auto __orig_x__ = x;                           \
-		if (__builtin_sub_overflow(x, 1, &x)) [[unlikely]] { \
-			x = __orig_x__;                                  \
-			onoverflow;                                      \
-		}                                                    \
-	}
-#endif // defined(BUFFER_NO_BUILTINS)
+#endif // defined(CPPX_BUFFER_BUILTINS)
 
 namespace {
 namespace bufexc {
@@ -60,6 +60,7 @@ constexpr const char *buf_data_not_owned = "Cannot use modified data";
 constexpr const char *buf_insufficient = "Insufficient buffer storage";
 constexpr const char *buf_no_manager = "No suitable data manager";
 constexpr const char *buf_cannot_copy = "Cannot copy to new buffer";
+constexpr const char *buf_size_overflow = "Size overflow";
 
 constexpr const char *buf_fail_ref_overflow = "Reference count overflow";
 constexpr const char *buf_fail_ref_underflow = "Reference count underflow";
@@ -116,12 +117,12 @@ bool BufferCore::tryShare()
 
 bool BufferCore::tryAllocate(std::size_t bytes)
 {
-	if (!m_manager->flags.memory)
+	if (!m_manager->flags.memory || bytes > BufferCore::max_size)
 		return false;
 
 	m_address = reinterpret_cast<std::uint8_t *>(m_manager->alloc(bytes));
 	m_preall = 0;
-	m_size = bytes;
+	m_size = static_cast<std::uint32_t>(bytes);
 	return bool(m_address);
 }
 
@@ -254,7 +255,17 @@ Buffer::Buffer(const BufferManager *manager, void *pointer, std::size_t size)
 		    Exception::makeCallString(__FUNCTION__, manager, pointer, size),
 		    bufexc::buf_data_not_owned);
 
-	BufferCore::create(m_core, manager, 0, size, reinterpret_cast<std::uint8_t *>(pointer));
+	if (size > BufferCore::max_size)
+		throw Exception(
+		    Exception::makeCallString(__FUNCTION__, manager, pointer, size),
+		    bufexc::buf_size_overflow);
+
+	BufferCore::create(
+	    m_core,
+	    manager,
+	    0,
+	    static_cast<std::uint32_t>(size),
+	    reinterpret_cast<std::uint8_t *>(pointer));
 }
 
 Buffer::Buffer(const Buffer &other)
@@ -282,7 +293,7 @@ Buffer::~Buffer()
 
 /** @static */ [[nodiscard]] Buffer Buffer::HeapPreall(std::size_t size)
 {
-	auto result = Buffer(&heapManager, size > (typeof(BufferCore::m_preall))~0 ? (typeof(BufferCore::m_preall))~0 : size);
+	auto result = Buffer(&heapManager, size > BufferCore::max_preall ? BufferCore::max_preall : size);
 
 	result.m_core->m_preall = result.m_core->m_size;
 	result.m_core->m_size = 0;
@@ -616,8 +627,8 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 {
 	const BufferManager *resultManager = imanager ? imanager : manager();
 	const auto cappedExtra =
-	    preallocated() + extra > (typeof(BufferCore::m_preall))~0
-	        ? (typeof(BufferCore::m_preall))~0 - preallocated()
+	    preallocated() + extra > BufferCore::max_preall
+	        ? BufferCore::max_preall - preallocated()
 	        : extra;
 
 	if (!resultManager)
@@ -632,8 +643,8 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 	if (!newCore->tryAllocate(totalsize() + extra))
 		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_alloc);
 
-	newCore->m_size = size();
-	newCore->m_preall = preallocated() + extra;
+	newCore->m_size = static_cast<std::uint32_t>(size());
+	newCore->m_preall = static_cast<std::uint16_t>(preallocated() + extra);
 
 	if (m_core)
 		BUFFER_COPY(newCore->m_address, m_core->m_address, m_core->m_size);
@@ -814,7 +825,7 @@ Buffer &Buffer::selfReverse()
 [[nodiscard]] Buffer Buffer::insert(std::size_t index, const Buffer &value, const BufferManager *imanager) const
 {
 	if (index > size())
-		throw Exception(Exception::makeCallString(__FUNCTION__, end, value), bufexc::iter_invalid);
+		throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::iter_invalid);
 
 	const BufferManager *newManager = imanager ? imanager : manager();
 
@@ -945,7 +956,7 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 
 	const auto newSize = size() - end + start;
 
-	if (m_core->m_refcount > 1 || m_core->m_preall > ((typeof(BufferCore::m_preall))~0) - (end - start)) {
+	if (m_core->m_refcount > 1 || m_core->m_preall > (BufferCore::max_preall) - (end - start)) {
 		if (!m_core->m_manager->flags.memory)
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_no_alloc);
 
@@ -962,8 +973,8 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
-		m_core->m_preall += end - start;
-		m_core->m_size -= end - start;
+		m_core->m_preall += static_cast<std::uint16_t>(end - start);
+		m_core->m_size -= static_cast<std::uint32_t>(end - start);
 	}
 
 	return *this;

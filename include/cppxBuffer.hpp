@@ -36,6 +36,10 @@ public:
 
 	const BufferManager *m_manager;
 
+public:
+	constexpr static const std::size_t max_size = ~std::uint32_t(0);
+	constexpr static const std::size_t max_preall = ~std::uint16_t(0);
+
 private:
 	BufferCore(const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
 
@@ -147,6 +151,7 @@ public:
 		Iterator(BufferCore *const data, std::uint32_t index);
 
 	public:
+		Iterator() = default;
 		Iterator(const Iterator &other);
 		~Iterator();
 
@@ -172,8 +177,8 @@ public:
 		inline byte_t operator*() const { return value(); }
 		inline byte_t &operator*() { return value(); }
 
-		inline byte_t operator[](std::size_t offset) const { return step(offset).value(); }
-		inline byte_t &operator[](std::size_t offset) { return step(offset).value(); }
+		inline byte_t operator[](std::int32_t offset) const { return step(offset).value(); }
+		inline byte_t &operator[](std::int32_t offset) { return step(offset).value(); }
 
 		inline Iterator &operator++() { return stepSelf(1); }
 		inline Iterator &operator--() { return stepSelf(-1); }

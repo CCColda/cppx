@@ -9,6 +9,7 @@ project(cppx
 #---
 option(CPPX_BUILD_TEST "Build the tests for cppx" OFF)
 option(CPPX_BUFFER_DEBUG "Build the debug features of the Buffer class" OFF)
+option(CPPX_BUFFER_BUILTINS "Use __builtin functions" OFF)
 #---
 
 set(CPPX_SRC_DIR src)
@@ -41,6 +42,10 @@ target_sources(cppx PRIVATE ${CPPX_SRC_FILES})
 
 if (CPPX_BUFFER_DEBUG)
 	target_compile_definitions(cppx PUBLIC CPPX_BUFFER_DEBUG)
+endif()
+
+if (CPPX_BUFFER_BUILTINS)
+	target_compile_definitions(cppx PUBLIC CPPX_BUFFER_BUILTINS)
 endif()
 
 #---
