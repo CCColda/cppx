@@ -120,8 +120,8 @@ bool BufferCore::tryAllocate(std::size_t bytes)
 		return false;
 
 	m_address = reinterpret_cast<std::uint8_t *>(m_manager->alloc(bytes));
-	m_preall = bytes;
-	m_size = 0;
+	m_preall = 0;
+	m_size = bytes;
 	return bool(m_address);
 }
 
@@ -277,25 +277,22 @@ Buffer::~Buffer()
 
 /** @static */ [[nodiscard]] Buffer Buffer::Heap(std::size_t size)
 {
-	auto result = Buffer(&heapManager, size);
-
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
-
-	return result;
+	return Buffer(&heapManager, size);
 }
 
 /** @static */ [[nodiscard]] Buffer Buffer::HeapPreall(std::size_t size)
 {
-	return Buffer(&heapManager, size);
+	auto result = Buffer(&heapManager, size > (typeof(BufferCore::m_preall))~0 ? (typeof(BufferCore::m_preall))~0 : size);
+
+	result.m_core->m_preall = result.m_core->m_size;
+	result.m_core->m_size = 0;
+
+	return result;
 }
 
 /** @static */ [[nodiscard]] Buffer Buffer::HeapFrom(void *ptr, std::size_t size)
 {
 	auto result = Buffer(&heapManager, size);
-
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(result.m_core->m_address, ptr, result.m_core->m_size);
 
@@ -618,6 +615,10 @@ Buffer::Iterator Buffer::end() const
 Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager)
 {
 	const BufferManager *resultManager = imanager ? imanager : manager();
+	const auto cappedExtra =
+	    preallocated() + extra > (typeof(BufferCore::m_preall))~0
+	        ? (typeof(BufferCore::m_preall))~0 - preallocated()
+	        : extra;
 
 	if (!resultManager)
 		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_no_manager);
@@ -656,8 +657,6 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 		throw Exception(Exception::makeCallString(__FUNCTION__, manager), bufexc::buf_no_alloc);
 
 	Buffer result = Buffer(resultManager, m_core->m_size);
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(result.m_core->m_address, m_core->m_address, m_core->m_size);
 
@@ -684,9 +683,6 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 	if (!m_core->tryAllocate(other.m_core->m_size))
 		throw Exception(Exception::makeCallString(__FUNCTION__, other, imanager), bufexc::buf_fail_alloc);
 
-	m_core->m_size = m_core->m_preall;
-	m_core->m_preall = 0;
-
 	BUFFER_COPY(m_core->m_address, other.m_core->m_address, m_core->m_size);
 
 	return *this;
@@ -709,8 +705,6 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 		return Buffer(newManager, m_core->m_address + start, end - start);
 
 	auto result = Buffer(newManager, end - start);
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(result.m_core->m_address, m_core->m_address + start, result.m_core->m_size);
 
@@ -736,8 +730,6 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
 
 	auto result = Buffer(newManager, m_core->m_size);
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(
 	    result.m_core->m_address,
@@ -786,9 +778,6 @@ Buffer &Buffer::selfReverse(std::size_t start, std::size_t end)
 		if (!newCore->tryAllocate(m_core->m_size))
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_fail_alloc);
 
-		newCore->m_size = newCore->m_preall;
-		newCore->m_preall = 0;
-
 		for (std::size_t i = 0, j = m_core->m_size - 1; i < m_core->m_size; ++i, --j) {
 			newCore->m_address[i] = m_core->m_address[j];
 		}
@@ -833,8 +822,6 @@ Buffer &Buffer::selfReverse()
 		throw Exception(Exception::makeCallString(__FUNCTION__, index, value, imanager), bufexc::buf_no_manager);
 
 	Buffer newBuffer = Buffer(newManager, size() + value.size());
-	newBuffer.m_core->m_size = newBuffer.m_core->m_preall;
-	newBuffer.m_core->m_preall = 0;
 
 	if (m_core) {
 		BUFFER_COPY(newBuffer.m_core->m_address, m_core->m_address, index);
@@ -886,9 +873,6 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 		if (!newCore->tryAllocate(newSize))
 			throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_fail_alloc);
 
-		newCore->m_size = newCore->m_preall;
-		newCore->m_preall = 0;
-
 		BUFFER_COPY(newCore->m_address, m_core->m_address, index);
 		BUFFER_COPY(newCore->m_address + index, value.m_core->m_address, value.m_core->m_size);
 		BUFFER_COPY(newCore->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
@@ -933,8 +917,6 @@ Buffer &Buffer::selfAppend(const Buffer &right)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_cannot_copy);
 
 	auto result = Buffer(newManager, size() - end + start);
-	result.m_core->m_size = result.m_core->m_preall;
-	result.m_core->m_preall = 0;
 
 	BUFFER_COPY(result.m_core->m_address, m_core->m_address, start);
 	BUFFER_COPY(result.m_core->m_address, m_core->m_address + end, size() - end);
@@ -963,7 +945,7 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 
 	const auto newSize = size() - end + start;
 
-	if (m_core->m_refcount > 1) {
+	if (m_core->m_refcount > 1 || m_core->m_preall > ((typeof(BufferCore::m_preall))~0) - (end - start)) {
 		if (!m_core->m_manager->flags.memory)
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_no_alloc);
 
@@ -972,9 +954,6 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 
 		if (!newCore->tryAllocate(newSize))
 			throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::buf_fail_alloc);
-
-		newCore->m_size = newCore->m_preall;
-		newCore->m_preall = 0;
 
 		BUFFER_COPY(newCore->m_address, m_core->m_address, start);
 		BUFFER_COPY(newCore->m_address, m_core->m_address + end, size() - end);

@@ -74,9 +74,14 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 			}
 
 			const auto heapBuffer = Buffer(&Buffer::heapManager, 4);
-			REQUIRE(heapBuffer.size() == 0);
-			REQUIRE(heapBuffer.preallocated() == 4);
+			REQUIRE(heapBuffer.size() == 4);
+			REQUIRE(heapBuffer.preallocated() == 0);
 			REQUIRE(heapBuffer.data() != nullptr);
+
+			const auto largeBuffer = Buffer(&Buffer::heapManager, 0x1000F);
+			REQUIRE(largeBuffer.size() == 0x1000F);
+			REQUIRE(largeBuffer.preallocated() == 0);
+			REQUIRE(largeBuffer.data() != nullptr);
 		}
 
 		SECTION("data constructor")
