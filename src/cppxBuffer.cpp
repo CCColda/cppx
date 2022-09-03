@@ -869,6 +869,9 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 	if (!m_core->m_manager->flags.modify)
 		throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_readonly);
 
+	if (size() + value.size() > BufferCore::max_size)
+		throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_size_overflow);
+
 	if (!value)
 		return *this;
 
@@ -893,6 +896,9 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 	else {
 		BUFFER_MOVE(m_core->m_address + index + value.m_core->m_size, m_core->m_address + index, value.m_core->m_size);
 		BUFFER_COPY(m_core->m_address + index, value.m_core->m_address, value.m_core->m_size);
+
+		m_core->m_size += value.m_core->m_size;
+		m_core->m_preall -= static_cast<std::uint16_t>(value.m_core->m_size);
 	}
 
 	return *this;

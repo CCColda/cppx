@@ -385,6 +385,7 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 		REQUIRE(insertBuffer3 == Buffer::Static((void *)"\xF0\xE1\xD2\x01\x02\x03\x04\xC3\xB4\xA5\x96\x87\xA0\xB0\xC0\xD0", 16));
 	}
 
+	// TODO check that metadata changed correctly
 	SECTION("selfInsert")
 	{
 		std::uint8_t stackdata[8] = {0xF0, 0xE1, 0xD2, 0xC3, 0xB4, 0xA5, 0x96, 0x87};
