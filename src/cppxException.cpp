@@ -1,8 +1,8 @@
-#include "Exception.hpp"
+#include "cppxException.hpp"
 
 #include <iomanip>
 
-namespace colda {
+namespace cppx {
 
 Exception::Exception() noexcept
     : m_callstack(), m_description() {}
@@ -64,4 +64,4 @@ std::string Exception::getString() const noexcept
 	return "Description: \""s + m_description + "\"\nCallstack: "s + getCallstackString(11, -11);
 }
 
-} // namespace colda
+} // namespace cppx

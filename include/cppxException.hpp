@@ -1,5 +1,5 @@
-#ifndef EXCEPTION_H
-#define EXCEPTION_H
+#ifndef CPPX_EXCEPTION_H
+#define CPPX_EXCEPTION_H
 
 #include <sstream>
 #include <string>
@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <typeinfo>
 
-namespace colda {
+namespace cppx {
 
 /** @brief Class representing callstack-tracking exceptions */
 class Exception {
@@ -96,6 +96,6 @@ public:
 	}
 };
 
-} // namespace colda
+} // namespace cppx
 
-#endif // !EXCEPTION_H
+#endif // !CPPX_EXCEPTION_H

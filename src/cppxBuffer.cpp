@@ -1,5 +1,5 @@
-#include "Buffer.hpp"
-#include "Exception.hpp"
+#include "cppxBuffer.hpp"
+#include "cppxException.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -75,7 +75,7 @@ constexpr const char *no_data = "Data not avaliable";
 } // namespace bufexc
 } // namespace
 
-namespace colda {
+namespace cppx {
 #pragma region BufferManager
 
 /** @static */
@@ -625,7 +625,7 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 	if (!(resultManager->flags.memory && resultManager->flags.modify))
 		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_no_alloc);
 
-	BufferCore* newCore = nullptr;
+	BufferCore *newCore = nullptr;
 	BufferCore::create(newCore, resultManager);
 
 	if (!newCore->tryAllocate(totalsize() + extra))
@@ -697,7 +697,7 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 	if (end < start || end > size())
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
-	const BufferManager * newManager = imanager ? imanager : m_core->m_manager;
+	const BufferManager *newManager = imanager ? imanager : m_core->m_manager;
 
 	if (!newManager)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
@@ -921,7 +921,7 @@ Buffer &Buffer::selfAppend(const Buffer &right)
 	if (end < start || end > size())
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
 
-	const BufferManager * newManager = imanager ? imanager : m_core->m_manager;
+	const BufferManager *newManager = imanager ? imanager : m_core->m_manager;
 
 	if (!newManager)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::buf_no_manager);
@@ -950,8 +950,7 @@ Buffer &Buffer::selfAppend(const Buffer &right)
 	return erase(start.m_index, end.m_index, imanager);
 }
 
-
-Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
+Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 {
 	if (end < start || end > size())
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
@@ -981,7 +980,6 @@ Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
 		BUFFER_COPY(newCore->m_address, m_core->m_address + end, size() - end);
 
 		BufferCore::change(m_core, newCore);
-
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
@@ -992,14 +990,13 @@ Buffer& Buffer::selfErase(std::size_t start, std::size_t end)
 	return *this;
 }
 
-Buffer& Buffer::selfErase(Iterator start, Iterator end)
+Buffer &Buffer::selfErase(Iterator start, Iterator end)
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
 		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
 
 	return selfErase(start.m_index, end.m_index);
 }
-
 
 std::string Buffer::represent(std::uint8_t form) const
 {
@@ -1047,4 +1044,4 @@ std::string Buffer::represent(std::uint8_t form) const
 // BufferOperations
 #pragma endregion
 
-} // namespace colda
+} // namespace cppx

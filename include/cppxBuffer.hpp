@@ -1,12 +1,12 @@
-#ifndef BUFFER_H
-#define BUFFER_H
+#ifndef CPPX_BUFFER_H
+#define CPPX_BUFFER_H
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
 
-namespace colda {
+namespace cppx {
 struct BufferFlags {
 	std::uint8_t memory : 1;
 	std::uint8_t modify : 1;
@@ -64,9 +64,9 @@ public:
 	static const BufferManager stackManager;
 	static const BufferManager heapManager;
 
-	static constexpr const BufferManager * onStatic = &staticManager;
-	static constexpr const BufferManager * onStack = &stackManager;
-	static constexpr const BufferManager * onHeap = &heapManager;
+	static constexpr const BufferManager *onStatic = &staticManager;
+	static constexpr const BufferManager *onStack = &stackManager;
+	static constexpr const BufferManager *onHeap = &heapManager;
 
 private:
 	BufferCore *m_core;
@@ -111,7 +111,7 @@ public:
 	byte_t at(std::size_t i) const;
 	byte_t &at(std::size_t i);
 
-#ifdef BUFFER_DEBUG
+#ifdef CPPX_BUFFER_DEBUG
 	inline std::uint16_t refcount() const
 	{
 		return m_core ? m_core->m_refcount : 0;
@@ -242,8 +242,8 @@ public:
 	[[nodiscard]] Buffer erase(std::size_t start, std::size_t end, const BufferManager *manager = nullptr) const;
 	[[nodiscard]] Buffer erase(Iterator start, Iterator end, const BufferManager *manager = nullptr) const;
 
-	Buffer& selfErase(std::size_t start, std::size_t end);
-	Buffer& selfErase(Iterator start, Iterator end);
+	Buffer &selfErase(std::size_t start, std::size_t end);
+	Buffer &selfErase(Iterator start, Iterator end);
 
 	enum Representation : std::uint8_t {
 		HEX = 0x01,
@@ -254,6 +254,6 @@ public:
 	std::string represent(std::uint8_t form = Representation::HEX) const;
 	inline std::string toString() const { return represent(Representation::HEX | Representation::PREFIXED); }
 };
-} // namespace colda
+} // namespace cppx
 
-#endif // !defined(BUFFER_H)
+#endif // !defined(CPPX_BUFFER_H)

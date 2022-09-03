@@ -1,17 +1,14 @@
-#ifndef TEST_BUFFER_H
-#define TEST_BUFFER_H
-
-#include "Buffer.hpp"
-
 #include <catch2/catch_all.hpp>
-
 #include <execution>
 #include <numeric>
 
+#include "cppxBuffer.hpp"
+#include "cppxException.hpp"
+
 namespace Catch {
 template <>
-struct StringMaker<colda::Buffer> {
-	static std::string convert(colda::Buffer const &value)
+struct StringMaker<cppx::Buffer> {
+	static std::string convert(cppx::Buffer const &value)
 	{
 		return value.toString();
 	}
@@ -52,9 +49,9 @@ const auto randomStaticData()
 	return result;
 }
 
-TEST_CASE("colda::Buffer", "[Buffer]")
+TEST_CASE("cppx::Buffer", "[Buffer]")
 {
-	using colda::Buffer;
+	using cppx::Buffer;
 
 	static const char s_staticData[] = "i am static data";
 
@@ -425,5 +422,3 @@ TEST_CASE("colda::Buffer", "[Buffer]")
 		REQUIRE(s_staticbuf.clone(Buffer::onHeap).selfErase(0, s_staticbuf.size()) == Buffer());
 	}
 }
-
-#endif // !defined(TEST_BUFFER_H)

@@ -1,48 +1,52 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(buffer VERSION 1.0.0)
-
-#---
-option(BUFFER_BUILD_TEST "Build the tests for Buffer and Exception" OFF)
-option(BUFFER_DEBUG "Build the debug features of the Buffer class" OFF)
-#---
-
-set(BUFFER_SRC_DIR src)
-set(BUFFER_INC_DIR include)
-set(BUFFER_TST_DIR test)
-
-set(BUFFER_SRC_FILES
-	${BUFFER_SRC_DIR}/Buffer.cpp
-	${BUFFER_SRC_DIR}/Exception.cpp
-)
-
-set(BUFFER_INC_FILES
-	${BUFFER_INC_DIR}/Buffer.hpp
-	${BUFFER_INC_DIR}/Exception.hpp
-)
-
-set(BUFFER_TST_FILES
-	${BUFFER_TST_DIR}/main.cpp
-	${BUFFER_TST_DIR}/buffer.cpp
-	${BUFFER_TST_DIR}/exception.cpp
+project(cppx
+	VERSION      1.0.0
+	DESCRIPTION  "C++ Extended"
+	HOMEPAGE_URL "https://github.com/CCColda/cppx#readme"
+	LANGUAGES    "CXX"
 )
 
 #---
-add_library(buffer STATIC)
+option(CPPX_BUILD_TEST "Build the tests for cppx" OFF)
+option(CPPX_BUFFER_DEBUG "Build the debug features of the Buffer class" OFF)
+#---
 
-add_library(cold::Buffer ALIAS buffer)
-target_compile_features(buffer PRIVATE cxx_std_17)
+set(CPPX_SRC_DIR src)
+set(CPPX_INC_DIR include)
+set(CPPX_TST_DIR test)
 
-target_include_directories(buffer PUBLIC ${BUFFER_INC_DIR})
-target_sources(buffer PRIVATE ${BUFFER_SRC_FILES})
+set(CPPX_SRC_FILES
+	${CPPX_SRC_DIR}/cppxBuffer.cpp
+	${CPPX_SRC_DIR}/cppxException.cpp
+)
 
-if (BUFFER_DEBUG)
-	target_compile_definitions(buffer PUBLIC BUFFER_DEBUG)
+set(CPPX_INC_FILES
+	${CPPX_INC_DIR}/cppxBuffer.hpp
+	${CPPX_INC_DIR}/cppxException.hpp
+)
+
+set(CPPX_TST_FILES
+	${CPPX_TST_DIR}/buffer.test.cpp
+	${CPPX_TST_DIR}/exception.test.cpp
+)
+
+#---
+add_library(cppx STATIC)
+
+add_library(colda::cppx ALIAS cppx)
+target_compile_features(cppx PRIVATE cxx_std_17)
+
+target_include_directories(cppx PUBLIC ${CPPX_INC_DIR})
+target_sources(cppx PRIVATE ${CPPX_SRC_FILES})
+
+if (CPPX_BUFFER_DEBUG)
+	target_compile_definitions(cppx PUBLIC CPPX_BUFFER_DEBUG)
 endif()
 
 #---
 
-if (BUFFER_BUILD_TEST)
-	target_compile_definitions(buffer PUBLIC BUFFER_DEBUG)
+if (CPPX_BUILD_TEST)
+	target_compile_definitions(cppx PUBLIC CPPX_BUFFER_DEBUG)
 
 	Include(FetchContent)
 
@@ -54,14 +58,14 @@ if (BUFFER_BUILD_TEST)
 
 	FetchContent_MakeAvailable(Catch2)
 
-	add_executable(buffer_test)
-	target_sources(buffer_test PRIVATE ${BUFFER_TST_FILES})
-	target_compile_features(buffer_test PRIVATE cxx_std_17)
-	target_link_libraries(buffer_test PRIVATE cold::Buffer Catch2::Catch2WithMain)
+	add_executable(cppx_test)
+	target_sources(cppx_test PRIVATE ${CPPX_TST_FILES})
+	target_compile_features(cppx_test PRIVATE cxx_std_17)
+	target_link_libraries(cppx_test PRIVATE colda::cppx Catch2::Catch2WithMain)
 
 	list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 	include(CTest)
 	include(Catch)
 
-	catch_discover_tests(buffer_test)
+	catch_discover_tests(cppx_test)
 endif()
