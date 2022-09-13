@@ -37,8 +37,8 @@ public:
 	const BufferManager *m_manager;
 
 public:
-	constexpr static const std::size_t max_size = ~std::uint32_t(0);
-	constexpr static const std::size_t max_preall = ~std::uint16_t(0);
+	constexpr static const std::size_t max_size = std::uint32_t(~0);
+	constexpr static const std::size_t max_preall = std::uint16_t(~0);
 
 private:
 	BufferCore(const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
@@ -46,6 +46,8 @@ private:
 public:
 	~BufferCore() = default;
 
+	std::uint8_t *tryAllocateRaw(std::size_t bytes);
+	bool tryDeallocateRaw();
 	bool tryShare();
 	bool tryAllocate(std::size_t bytes);
 	bool tryDeallocate();
@@ -56,7 +58,7 @@ public:
 	static void create(BufferCore *&core, const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
 	static void release(BufferCore *&core);
 	static void change(BufferCore *&core, BufferCore *const newcore);
-	static void swap(BufferCore *&core, BufferCore *&newcore);
+	static void change_to_orphan_core(BufferCore *&core, BufferCore *&newcore);
 };
 
 class Buffer {

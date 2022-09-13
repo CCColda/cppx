@@ -109,6 +109,25 @@ BufferCore::BufferCore(
 {
 }
 
+std::uint8_t *BufferCore::tryAllocateRaw(std::size_t bytes)
+{
+	if (!m_manager->flags.memory || bytes > BufferCore::max_size)
+		return nullptr;
+
+	return reinterpret_cast<std::uint8_t *>(m_manager->alloc(bytes));
+}
+
+bool BufferCore::tryDeallocateRaw()
+{
+	if (!m_manager->flags.memory)
+		return false;
+
+	m_manager->release(m_address, m_size + m_preall);
+	m_address = nullptr;
+
+	return true;
+}
+
 bool BufferCore::tryShare()
 {
 	BUFFER_SAFE_INCREASE(m_refcount, { return false; })
@@ -117,10 +136,7 @@ bool BufferCore::tryShare()
 
 bool BufferCore::tryAllocate(std::size_t bytes)
 {
-	if (!m_manager->flags.memory || bytes > BufferCore::max_size)
-		return false;
-
-	m_address = reinterpret_cast<std::uint8_t *>(m_manager->alloc(bytes));
+	m_address = tryAllocateRaw(bytes);
 	m_preall = 0;
 	m_size = static_cast<std::uint32_t>(bytes);
 	return bool(m_address);
@@ -128,11 +144,9 @@ bool BufferCore::tryAllocate(std::size_t bytes)
 
 bool BufferCore::tryDeallocate()
 {
-	if (!m_manager->flags.memory)
+	if (!tryDeallocateRaw())
 		return false;
 
-	m_manager->release(m_address, m_size + m_preall);
-	m_address = nullptr;
 	m_size = 0;
 	m_preall = 0;
 
@@ -195,12 +209,11 @@ void BufferCore::change(BufferCore *&core, BufferCore *const newcore)
 }
 
 /** @static */
-void BufferCore::swap(BufferCore *&core, BufferCore *&newcore)
+void BufferCore::change_to_orphan_core(BufferCore *&core, BufferCore *&newcore)
 {
-	auto &tempcore = newcore;
+	release(core);
 
-	newcore = core;
-	core = tempcore;
+	core = newcore;
 }
 
 // BufferCore
@@ -327,7 +340,9 @@ Buffer &Buffer::operator=(const Buffer &other)
 	}
 	else {
 		m_core = other.m_core;
-		BufferCore::shareOrDetach(m_core);
+
+		if (m_core)
+			BufferCore::shareOrDetach(m_core);
 	}
 
 	return *this;
@@ -340,7 +355,9 @@ Buffer &Buffer::operator=(Buffer &&other)
 	}
 	else {
 		m_core = other.m_core;
-		BufferCore::shareOrDetach(m_core);
+
+		if (m_core)
+			BufferCore::shareOrDetach(m_core);
 	}
 
 	return *this;
@@ -567,7 +584,9 @@ Buffer::Iterator &Buffer::Iterator::operator=(const Iterator &other)
 	}
 	else {
 		m_data = other.m_data;
-		BufferCore::shareOrDetach(m_data);
+
+		if (m_data)
+			BufferCore::shareOrDetach(m_data);
 	}
 
 	return *this;
@@ -580,7 +599,9 @@ Buffer::Iterator &Buffer::Iterator::operator=(Iterator &&other)
 	}
 	else {
 		m_data = other.m_data;
-		BufferCore::shareOrDetach(m_data);
+
+		if (m_data)
+			BufferCore::shareOrDetach(m_data);
 	}
 
 	return *this;
@@ -637,19 +658,33 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 	if (!(resultManager->flags.memory && resultManager->flags.modify))
 		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_no_alloc);
 
-	BufferCore *newCore = nullptr;
-	BufferCore::create(newCore, resultManager);
+	if (m_core ? m_core->m_refcount > 1 : true) {
+		BufferCore *newCore = nullptr;
+		BufferCore::create(newCore, resultManager);
 
-	if (!newCore->tryAllocate(totalsize() + extra))
-		throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_alloc);
+		if (!newCore->tryAllocate(totalsize() + cappedExtra))
+			throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_alloc);
 
-	newCore->m_size = static_cast<std::uint32_t>(size());
-	newCore->m_preall = static_cast<std::uint16_t>(preallocated() + extra);
+		newCore->m_size = static_cast<std::uint32_t>(size());
+		newCore->m_preall = static_cast<std::uint16_t>(preallocated() + cappedExtra);
 
-	if (m_core)
-		BUFFER_COPY(newCore->m_address, m_core->m_address, m_core->m_size);
+		if (m_core)
+			BUFFER_COPY(newCore->m_address, m_core->m_address, m_core->m_size);
 
-	BufferCore::change(m_core, newCore);
+		BufferCore::change_to_orphan_core(m_core, newCore);
+	}
+	else {
+		auto newAddress = m_core->tryAllocateRaw(totalsize() + cappedExtra);
+		if (!newAddress)
+			throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_alloc);
+
+		BUFFER_COPY(newAddress, m_core->m_address, m_core->m_size);
+		if (!m_core->tryDeallocateRaw())
+			throw Exception(Exception::makeCallString(__FUNCTION__, extra, imanager), bufexc::buf_fail_release);
+
+		m_core->m_address = newAddress;
+		m_core->m_preall += static_cast<std::uint16_t>(cappedExtra);
+	}
 
 	return *this;
 }
@@ -793,7 +828,7 @@ Buffer &Buffer::selfReverse(std::size_t start, std::size_t end)
 			newCore->m_address[i] = m_core->m_address[j];
 		}
 
-		BufferCore::change(m_core, newCore);
+		BufferCore::change_to_orphan_core(m_core, newCore);
 	}
 	else {
 		const std::size_t halfway = start + (end - start) / 2;
@@ -875,9 +910,9 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 	if (!value)
 		return *this;
 
-	const auto newSize = m_core->m_size + value.m_core->m_size;
+	if (value.m_core->m_size > m_core->m_preall || m_core->m_refcount > 1) {
+		const auto newSize = m_core->m_size + value.m_core->m_size;
 
-	if (newSize > m_core->m_preall || m_core->m_refcount > 1) {
 		if (!m_core->m_manager->flags.memory)
 			throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::buf_insufficient);
 
@@ -891,10 +926,10 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 		BUFFER_COPY(newCore->m_address + index, value.m_core->m_address, value.m_core->m_size);
 		BUFFER_COPY(newCore->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
 
-		BufferCore::change(m_core, newCore);
+		BufferCore::change_to_orphan_core(m_core, newCore);
 	}
 	else {
-		BUFFER_MOVE(m_core->m_address + index + value.m_core->m_size, m_core->m_address + index, value.m_core->m_size);
+		BUFFER_MOVE(m_core->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
 		BUFFER_COPY(m_core->m_address + index, value.m_core->m_address, value.m_core->m_size);
 
 		m_core->m_size += value.m_core->m_size;
@@ -975,7 +1010,7 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 		BUFFER_COPY(newCore->m_address, m_core->m_address, start);
 		BUFFER_COPY(newCore->m_address, m_core->m_address + end, size() - end);
 
-		BufferCore::change(m_core, newCore);
+		BufferCore::change_to_orphan_core(m_core, newCore);
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
