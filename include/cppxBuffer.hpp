@@ -58,7 +58,6 @@ public:
 	static void create(BufferCore *&core, const BufferManager *manager, std::uint16_t preall = 0, std::uint32_t size = 0, std::uint8_t *address = nullptr);
 	static void release(BufferCore *&core);
 	static void change(BufferCore *&core, BufferCore *const newcore);
-	static void change_to_orphan_core(BufferCore *&core, BufferCore *&newcore);
 };
 
 class Buffer {

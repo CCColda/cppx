@@ -205,15 +205,9 @@ void BufferCore::change(BufferCore *&core, BufferCore *const newcore)
 	release(core);
 
 	core = newcore;
-	shareOrDetach(core);
-}
 
-/** @static */
-void BufferCore::change_to_orphan_core(BufferCore *&core, BufferCore *&newcore)
-{
-	release(core);
-
-	core = newcore;
+	if (core)
+		shareOrDetach(core);
 }
 
 // BufferCore
@@ -572,7 +566,7 @@ Buffer::Iterator Buffer::Iterator::operator--(int)
 std::ptrdiff_t Buffer::Iterator::operator-(const Iterator &other) const
 {
 	if (m_data == nullptr || m_data != other.m_data)
-		throw Exception(Exception::makeCallString(__FUNCTION__, other), bufexc::iter_invalid_sub);
+		throw Exception(Exception::makeCallString(__FUNCTION__, other.toString()), bufexc::iter_invalid_sub);
 
 	return std::ptrdiff_t(m_index - other.m_index);
 }
@@ -671,7 +665,7 @@ Buffer &Buffer::selfPreallocate(std::size_t extra, const BufferManager *imanager
 		if (m_core)
 			BUFFER_COPY(newCore->m_address, m_core->m_address, m_core->m_size);
 
-		BufferCore::change_to_orphan_core(m_core, newCore);
+		BufferCore::change(m_core, newCore);
 	}
 	else {
 		auto newAddress = m_core->tryAllocateRaw(totalsize() + cappedExtra);
@@ -760,7 +754,7 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 [[nodiscard]] Buffer Buffer::range(Iterator start, Iterator end, const BufferManager *imanager) const
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start.toString(), end.toString(), imanager), bufexc::invalid_range);
 
 	return range(start.m_index, end.m_index, imanager);
 }
@@ -796,7 +790,7 @@ Buffer &Buffer::selfClone(const Buffer &other, const BufferManager *imanager)
 [[nodiscard]] Buffer Buffer::reverse(Iterator start, Iterator end, const BufferManager *imanager) const
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start.toString(), end.toString(), imanager), bufexc::invalid_range);
 
 	return reverse(start.m_index, end.m_index, imanager);
 }
@@ -828,7 +822,7 @@ Buffer &Buffer::selfReverse(std::size_t start, std::size_t end)
 			newCore->m_address[i] = m_core->m_address[j];
 		}
 
-		BufferCore::change_to_orphan_core(m_core, newCore);
+		BufferCore::change(m_core, newCore);
 	}
 	else {
 		const std::size_t halfway = start + (end - start) / 2;
@@ -847,7 +841,7 @@ Buffer &Buffer::selfReverse(std::size_t start, std::size_t end)
 Buffer &Buffer::selfReverse(Iterator start, Iterator end)
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start.toString(), end.toString()), bufexc::invalid_range);
 
 	return selfReverse(start.m_index, end.m_index);
 }
@@ -883,7 +877,7 @@ Buffer &Buffer::selfReverse()
 [[nodiscard]] Buffer Buffer::insert(Iterator index, const Buffer &value, const BufferManager *imanager) const
 {
 	if (index.m_data != m_core)
-		throw Exception(Exception::makeCallString(__FUNCTION__, index, value, imanager), bufexc::iter_invalid);
+		throw Exception(Exception::makeCallString(__FUNCTION__, index.toString(), value, imanager), bufexc::iter_invalid);
 
 	return insert(index.m_index, value, imanager);
 }
@@ -926,7 +920,7 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 		BUFFER_COPY(newCore->m_address + index, value.m_core->m_address, value.m_core->m_size);
 		BUFFER_COPY(newCore->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
 
-		BufferCore::change_to_orphan_core(m_core, newCore);
+		BufferCore::change(m_core, newCore);
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + index + value.m_core->m_size, m_core->m_address + index, m_core->m_size - index);
@@ -942,7 +936,7 @@ Buffer &Buffer::selfInsert(std::size_t index, const Buffer &value)
 Buffer &Buffer::selfInsert(Iterator index, const Buffer &value)
 {
 	if (index.m_data != m_core)
-		throw Exception(Exception::makeCallString(__FUNCTION__, index, value), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, index.toString(), value), bufexc::invalid_range);
 
 	return selfInsert(index.m_index, value);
 }
@@ -979,7 +973,7 @@ Buffer &Buffer::selfAppend(const Buffer &right)
 [[nodiscard]] Buffer Buffer::erase(Iterator start, Iterator end, const BufferManager *imanager) const
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end, imanager), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start.toString(), end.toString(), imanager), bufexc::invalid_range);
 
 	return erase(start.m_index, end.m_index, imanager);
 }
@@ -1010,7 +1004,7 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 		BUFFER_COPY(newCore->m_address, m_core->m_address, start);
 		BUFFER_COPY(newCore->m_address, m_core->m_address + end, size() - end);
 
-		BufferCore::change_to_orphan_core(m_core, newCore);
+		BufferCore::change(m_core, newCore);
 	}
 	else {
 		BUFFER_MOVE(m_core->m_address + start, m_core->m_address + end, size() - end);
@@ -1024,7 +1018,7 @@ Buffer &Buffer::selfErase(std::size_t start, std::size_t end)
 Buffer &Buffer::selfErase(Iterator start, Iterator end)
 {
 	if (start.m_data != end.m_data || start.m_data != m_core || end.m_index < start.m_index)
-		throw Exception(Exception::makeCallString(__FUNCTION__, start, end), bufexc::invalid_range);
+		throw Exception(Exception::makeCallString(__FUNCTION__, start.toString(), end.toString()), bufexc::invalid_range);
 
 	return selfErase(start.m_index, end.m_index);
 }
@@ -1062,7 +1056,7 @@ std::string Buffer::represent(std::uint8_t form) const
 			const auto v = m_core->m_address[index];
 
 			for (std::size_t bit = 0x80; bit > 0; bit >>= 1)
-				stream << ((v & bit) == bit) ? '1' : '0';
+				stream << (((v & bit) == bit) ? '1' : '0');
 		}
 	}
 	else {
