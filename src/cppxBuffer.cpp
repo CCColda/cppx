@@ -156,8 +156,9 @@ bool BufferCore::tryDeallocate()
 /** @static */
 void BufferCore::shareOrDetach(BufferCore *&core)
 {
-	if (!core->tryShare())
-		detach(core);
+	if (core)
+		if (!core->tryShare())
+			detach(core);
 }
 
 /** @static */
@@ -187,8 +188,9 @@ void BufferCore::create(BufferCore *&core, const BufferManager *manager, std::ui
 /** @static */
 void BufferCore::release(BufferCore *&core)
 {
-	if (core->m_address && core->m_refcount <= 1 && core->m_manager->flags.memory) {
-		core->m_manager->release(core->m_address, core->m_size + core->m_preall);
+	if (core->m_address && core->m_refcount <= 1) {
+		if (core->m_manager->flags.memory)
+			core->m_manager->release(core->m_address, core->m_size + core->m_preall);
 
 		delete core;
 	}
@@ -206,8 +208,7 @@ void BufferCore::change(BufferCore *&core, BufferCore *const newcore)
 
 	core = newcore;
 
-	if (core)
-		shareOrDetach(core);
+	shareOrDetach(core);
 }
 
 // BufferCore
@@ -335,8 +336,7 @@ Buffer &Buffer::operator=(const Buffer &other)
 	else {
 		m_core = other.m_core;
 
-		if (m_core)
-			BufferCore::shareOrDetach(m_core);
+		BufferCore::shareOrDetach(m_core);
 	}
 
 	return *this;
@@ -350,8 +350,7 @@ Buffer &Buffer::operator=(Buffer &&other)
 	else {
 		m_core = other.m_core;
 
-		if (m_core)
-			BufferCore::shareOrDetach(m_core);
+		BufferCore::shareOrDetach(m_core);
 	}
 
 	return *this;
@@ -579,8 +578,7 @@ Buffer::Iterator &Buffer::Iterator::operator=(const Iterator &other)
 	else {
 		m_data = other.m_data;
 
-		if (m_data)
-			BufferCore::shareOrDetach(m_data);
+		BufferCore::shareOrDetach(m_data);
 	}
 
 	return *this;
@@ -594,8 +592,7 @@ Buffer::Iterator &Buffer::Iterator::operator=(Iterator &&other)
 	else {
 		m_data = other.m_data;
 
-		if (m_data)
-			BufferCore::shareOrDetach(m_data);
+		BufferCore::shareOrDetach(m_data);
 	}
 
 	return *this;
