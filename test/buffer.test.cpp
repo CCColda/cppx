@@ -1,6 +1,11 @@
+#include <array>
 #include <catch2/catch_all.hpp>
 #include <execution>
 #include <numeric>
+
+#ifndef CPPX_BUFFER_DEBUG
+#define CPPX_BUFFER_DEBUG
+#endif // !defined(CPPX_BUFFER_DEBUG)
 
 #include "cppxBuffer.hpp"
 #include "cppxException.hpp"
@@ -16,37 +21,25 @@ struct StringMaker<cppx::Buffer> {
 } // namespace Catch
 
 template <std::size_t N = 16>
-const auto randomStackData()
+inline std::array<std::uint8_t, N> randomStackData()
 {
-	static_assert(N > 0, "N must be greater than 0");
+	auto result = std::array<std::uint8_t, N>();
 
-	struct {
-		std::uint8_t data[N];
-		std::size_t size;
-	} result = {{}, N};
-
-	for (std::size_t i = 0; i < result.size; ++i)
-		result.data[i] = rand() % 0x100;
+	for (std::size_t i = 0; i < N; ++i)
+		result[i] = GENERATE(0, 0x100);
 
 	return result;
 }
 
 template <std::size_t N = 16>
-const auto randomStaticData()
+const inline std::array<std::uint8_t, N> randomStaticData()
 {
-	static_assert(N > 0, "N must be greater than 0");
+	static auto data = std::array<std::uint8_t, N>();
 
-	static std::uint8_t data[N] = {};
+	for (std::size_t i = 0; i < N; ++i)
+		data[i] = GENERATE(0, 0x100) % 0x100;
 
-	struct {
-		std::uint8_t *data;
-		std::size_t size;
-	} result = {(uint8_t *)&data, N};
-
-	for (std::size_t i = 0; i < result.size; ++i)
-		data[i] = rand() % 0x100;
-
-	return result;
+	return data;
 }
 
 TEST_CASE("cppx::Buffer", "[Buffer]")
@@ -54,6 +47,11 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 	using cppx::Buffer;
 
 	static const char s_staticData[] = "i am static data";
+
+	SECTION("static checks")
+	{
+		STATIC_REQUIRE(sizeof(typename Buffer::byte_t) == 1);
+	}
 
 	SECTION("constructor")
 	{
@@ -94,24 +92,30 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 				REQUIRE_THROWS(Buffer(&Buffer::heapManager, (void *)"ABCD", 4));
 			}
 
-			const auto stackBuffer = Buffer(&Buffer::stackManager, (void *)stackData.data, stackData.size);
-			REQUIRE(stackBuffer.data() == stackData.data);
+			const auto stackBuffer = Buffer(&Buffer::stackManager, (void *)stackData.data(), stackData.size());
+			REQUIRE(stackBuffer.data() == stackData.data());
 			REQUIRE(stackBuffer.preallocated() == 0);
-			REQUIRE(stackBuffer.size() == stackData.size);
+			REQUIRE(stackBuffer.size() == stackData.size());
 
-			const auto staticBuffer = Buffer(&Buffer::staticManager, (void *)staticData.data, staticData.size);
-			REQUIRE(staticBuffer.data() == staticData.data);
+			const auto staticBuffer = Buffer(&Buffer::staticManager, (void *)staticData.data(), staticData.size());
+			REQUIRE(staticBuffer.data() == staticData.data());
 			REQUIRE(staticBuffer.preallocated() == 0);
-			REQUIRE(staticBuffer.size() == staticData.size);
+			REQUIRE(staticBuffer.size() == staticData.size());
 		}
 
 		SECTION("HeapPreall constructor")
 		{
-			const auto heapBuffer = Buffer::HeapPreall(4);
+			const auto preallocatedWithinLimits = Buffer::HeapPreall(32);
+			REQUIRE(preallocatedWithinLimits.size() == 0);
+			REQUIRE(preallocatedWithinLimits.preallocated() == 32);
+			REQUIRE(preallocatedWithinLimits.totalsize() == 32);
+			REQUIRE_THROWS(preallocatedWithinLimits.at(0));
 
-			REQUIRE(heapBuffer.size() == 0);
-			REQUIRE(heapBuffer.preallocated() == 4);
-			REQUIRE(heapBuffer.data() != nullptr);
+			const auto preallocatedOutOfLimits = Buffer::HeapPreall(cppx::BufferCore::max_preall + 1);
+			REQUIRE(preallocatedOutOfLimits.size() == 0);
+			REQUIRE(preallocatedOutOfLimits.preallocated() == cppx::BufferCore::max_preall);
+			REQUIRE(preallocatedOutOfLimits.totalsize() == cppx::BufferCore::max_preall);
+			REQUIRE_THROWS(preallocatedOutOfLimits.at(0));
 		}
 
 		SECTION("Heap constructor")
@@ -126,14 +130,14 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 		SECTION("HeapFrom constructor")
 		{
 			const auto data = randomStackData();
-			const auto heapBuffer = Buffer::HeapFrom((void *)data.data, data.size);
+			const auto heapBuffer = Buffer::HeapFrom((void *)data.data(), data.size());
 
-			REQUIRE(heapBuffer.size() == data.size);
+			REQUIRE(heapBuffer.size() == data.size());
 			REQUIRE(heapBuffer.preallocated() == 0);
 
 			REQUIRE_THAT(heapBuffer.data(), Catch::Matchers::Predicate<void *>([data](void *bufdata) {
-				             for (std::size_t i = 0; i < data.size; ++i)
-					             if (data.data[i] != ((std::uint8_t *)bufdata)[i])
+				             for (std::size_t i = 0; i < data.size(); ++i)
+					             if (data[i] != ((std::uint8_t *)bufdata)[i])
 						             return false;
 				             return true;
 			             }));
@@ -142,21 +146,21 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 		SECTION("Stack constructor")
 		{
 			const auto stackData = randomStackData();
-			const auto stackBuffer = Buffer::Stack((void *)stackData.data, stackData.size);
+			const auto stackBuffer = Buffer::Stack((void *)stackData.data(), stackData.size());
 
-			REQUIRE(stackBuffer.size() == stackData.size);
+			REQUIRE(stackBuffer.size() == stackData.size());
 			REQUIRE(stackBuffer.preallocated() == 0);
-			REQUIRE(stackBuffer.data() == stackData.data);
+			REQUIRE(stackBuffer.data() == stackData.data());
 		}
 
 		SECTION("Static constructor")
 		{
 			const auto staticData = randomStaticData();
-			const auto staticBuffer = Buffer::Stack((void *)staticData.data, staticData.size);
+			const auto staticBuffer = Buffer::Stack((void *)staticData.data(), staticData.size());
 
-			REQUIRE(staticBuffer.size() == staticData.size);
+			REQUIRE(staticBuffer.size() == staticData.size());
 			REQUIRE(staticBuffer.preallocated() == 0);
-			REQUIRE(staticBuffer.data() == staticData.data);
+			REQUIRE(staticBuffer.data() == staticData.data());
 		}
 	}
 
@@ -267,6 +271,14 @@ TEST_CASE("cppx::Buffer", "[Buffer]")
 
 	SECTION("preall")
 	{
+		const auto stackData = randomStackData<8>();
+		auto preallBuffer = Buffer::HeapFrom((void *)stackData.data(), stackData.size());
+
+		preallBuffer.selfPreallocate(8);
+
+		REQUIRE(preallBuffer.preallocated() == 8);
+		REQUIRE(preallBuffer.size() == 8);
+		REQUIRE(preallBuffer.totalsize() == 16);
 	}
 
 	SECTION("clone")

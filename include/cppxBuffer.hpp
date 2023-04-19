@@ -77,7 +77,7 @@ private:
 	BufferCore *m_core;
 
 public:
-	Buffer();
+	constexpr Buffer() : m_core(nullptr) {}
 	Buffer(const BufferManager *manager, std::size_t size = 0);
 	Buffer(const BufferManager *manager, void *pointer, std::size_t size);
 	Buffer(const Buffer &other);
@@ -98,12 +98,12 @@ public:
 	operator bool() const;
 	bool operator!() const;
 
-	bool operator==(const Buffer &other) const;
-	bool operator!=(const Buffer &other) const;
-	bool operator>(const Buffer &other) const;
-	bool operator<(const Buffer &other) const;
-	bool operator>=(const Buffer &other) const;
-	bool operator<=(const Buffer &other) const;
+	inline bool operator==(const Buffer &other) const { return compare(other) == 0; }
+	inline bool operator!=(const Buffer &other) const { return compare(other) != 0; }
+	inline bool operator>(const Buffer &other) const { return compare(other) > 0; }
+	inline bool operator<(const Buffer &other) const { return compare(other) < 0; }
+	inline bool operator>=(const Buffer &other) const { return compare(other) >= 0; }
+	inline bool operator<=(const Buffer &other) const { return compare(other) <= 0; }
 
 	[[nodiscard]] void *data() noexcept;
 	[[nodiscard]] void *data() const noexcept;
@@ -158,7 +158,7 @@ public:
 
 		std::size_t maxIndex() const noexcept;
 
-		std::size_t index() const noexcept;
+		constexpr std::size_t index() const noexcept { return m_index; }
 
 		/**
 		 * @brief Returns the current value

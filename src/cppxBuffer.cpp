@@ -237,8 +237,6 @@ const BufferManager Buffer::heapManager = {
     [](std::size_t size) -> void * { return new std::uint8_t[size]; },
     [](void *ptr, std::size_t size) -> void { delete[] reinterpret_cast<std::uint8_t *>(ptr); }};
 
-Buffer::Buffer() : m_core(nullptr) {}
-
 Buffer::Buffer(const BufferManager *manager, std::size_t size)
     : m_core(nullptr)
 {
@@ -380,13 +378,6 @@ int Buffer::compare(const Buffer &other) const noexcept
 Buffer::operator bool() const { return m_core ? bool(m_core->m_address) : false; }
 bool Buffer::operator!() const { return m_core ? !m_core->m_address : true; }
 
-bool Buffer::operator==(const Buffer &other) const { return compare(other) == 0; }
-bool Buffer::operator!=(const Buffer &other) const { return compare(other) != 0; }
-bool Buffer::operator>(const Buffer &other) const { return compare(other) > 0; }
-bool Buffer::operator<(const Buffer &other) const { return compare(other) < 0; }
-bool Buffer::operator>=(const Buffer &other) const { return compare(other) >= 0; }
-bool Buffer::operator<=(const Buffer &other) const { return compare(other) <= 0; }
-
 [[nodiscard]] void *Buffer::data() noexcept
 {
 	return m_core
@@ -458,7 +449,6 @@ Buffer::byte_t &Buffer::at(std::size_t i)
 Buffer::Iterator::Iterator(BufferCore *const data, std::uint32_t index)
     : m_data(data), m_index(index)
 {
-
 	if (m_data)
 		if (!m_data->tryShare())
 			throw Exception(__FUNCTION__, bufexc::iter_instantiation_fail_ref_overflow);
@@ -467,7 +457,6 @@ Buffer::Iterator::Iterator(BufferCore *const data, std::uint32_t index)
 Buffer::Iterator::Iterator(const Iterator &other)
     : m_data(other.m_data), m_index(other.m_index)
 {
-
 	if (m_data)
 		if (!m_data->tryShare())
 			throw Exception(__FUNCTION__, bufexc::iter_instantiation_fail_ref_overflow);
@@ -482,11 +471,6 @@ Buffer::Iterator::~Iterator()
 std::size_t Buffer::Iterator::maxIndex() const noexcept
 {
 	return m_data ? m_data->m_size : 0;
-}
-
-std::size_t Buffer::Iterator::index() const noexcept
-{
-	return m_index;
 }
 
 Buffer::byte_t Buffer::Iterator::value() const
