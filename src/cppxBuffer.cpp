@@ -1,6 +1,7 @@
 #include "cppxBuffer.hpp"
 #include "cppxException.hpp"
 
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 
